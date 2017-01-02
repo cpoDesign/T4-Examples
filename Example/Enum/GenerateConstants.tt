@@ -1,0 +1,105 @@
+﻿<#@ template language="C#" hostspecific="True" debug="True" 
+#><#@ output extension="cs" 
+#><#@ assembly name="System.Data" #><#@ import namespace="System.Collections.Generic" #><#@ import namespace="System.Data" #><#@ import namespace="System.Data.SqlClient" 
+#><#
+     var sqlConn = new SqlConnection(@"Data Source=(localdb)\MSSQLLocalDB;Initial Catalog=V:\CODE\GIT\T4\EXAMPLE\APP_DATA\DATABASE1.MDF;Integrated Security=True;Connect Timeout=30;Encrypt=False;TrustServerCertificate=True;ApplicationIntent=ReadWrite;MultiSubnetFailover=False");
+   sqlConn.Open();
+#>using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
+
+namespace Example.Enum.Constants
+{
+	<#= GenerateColumnConstantClass(sqlConn, "[dbo].[PropertyTypes]", "Name", "Id", "PropertyTypes") #>
+	<#= GenerateColumnConstantIntegersClass(sqlConn, "[dbo].[PropertyTypes]", "ShortName", "Id", "ShortName") #>}	
+<#+	
+
+	public string GenerateColumnConstantClass(SqlConnection sqlConn, string tableName, string columnName, string idColumnName, string classPrefix = "")
+	{
+		var sql = string.Format("SELECT [{0}], [{1}] FROM {2} WHERE {1} IS NOT NULL ORDER BY {0}", idColumnName, columnName, tableName);
+		var sqlComm = new SqlCommand(sql, sqlConn);
+
+        var reader = sqlComm.ExecuteReader();
+		var className = String.Format("{0}{1}", columnName, "s");
+	#>[SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:FileMayOnlyContainASingleClass", Justification = "Reviewed. Suppression is OK here.")]
+	[SuppressMessage("StyleCop.CSharp.NamingRules", "SA1310:FieldNamesMustNotContainUnderscore", Justification = "Reviewed. Suppression is OK here.")]
+	public class <#=classPrefix#><#=className#>
+	{
+		<#+
+        var sb = new System.Text.StringBuilder();
+
+	    var columnOutputs = new List<string>();
+
+		while (reader.Read())
+        {
+            var tidyColumnName = TidyName(reader[columnName].ToString());
+            tidyColumnName = char.ToUpper(tidyColumnName[0]) + tidyColumnName.Substring(1);
+            var output = "public const string " + tidyColumnName + @" = """ + reader[columnName] + @""";";
+
+            if (!columnOutputs.Contains(output))
+            {
+                columnOutputs.Add(output);
+            }
+		}
+
+	    foreach (var columnOutput in columnOutputs)
+	    {
+	        sb.Append("\t\t");
+            sb.AppendLine(columnOutput);
+			sb.AppendLine(String.Empty);
+			sb.Append("\t\t");
+	    }
+
+        sb.Remove(sb.Length - 4, 4);
+		sb.AppendLine("\t}");
+
+        reader.Close();
+        sqlComm.Dispose();
+		return sb.ToString();
+	}
+
+	public string GenerateColumnConstantIntegersClass(SqlConnection sqlConn, string tableName, string columnName, string idColumnName, string classPrefix = "")
+	{
+		var sql = string.Format("SELECT [{0}], [{1}] FROM {2} WHERE {1} IS NOT NULL ORDER BY {0}", idColumnName, columnName, tableName);
+		var sqlComm = new SqlCommand(sql, sqlConn);
+
+        var reader = sqlComm.ExecuteReader();
+		var className = "Values";
+	#>[SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:FileMayOnlyContainASingleClass", Justification = "Reviewed. Suppression is OK here.")]
+	[SuppressMessage("StyleCop.CSharp.NamingRules", "SA1310:FieldNamesMustNotContainUnderscore", Justification = "Reviewed. Suppression is OK here.")]
+	public class <#=classPrefix#><#=className#>
+	{
+		<#+
+        var sb = new System.Text.StringBuilder();
+
+        while (reader.Read())
+        {
+            var tidyColumnName = TidyName(reader[columnName].ToString());
+            tidyColumnName = char.ToUpper(tidyColumnName[0]) + tidyColumnName.Substring(1);
+			sb.AppendLine(@"[Description(""" + reader[idColumnName] + @""")]");
+			sb.Append("\t\t");
+            sb.AppendLine("public const int " + tidyColumnName + @" = " + reader[idColumnName] + @";");
+			sb.AppendLine(String.Empty);
+			sb.Append("\t\t");
+		}		
+        sb.Remove(sb.Length - 4, 4);
+		sb.AppendLine("\t}");
+
+        reader.Close();
+        sqlComm.Dispose();
+		return sb.ToString();
+	}
+
+    public string TidyName(string name)
+    {
+		if (string.IsNullOrEmpty(name))
+		{
+			return string.Empty;
+		}
+
+        var tidyName = name;
+
+		tidyName = tidyName.Replace("&", "And").Replace("/", "And").Replace("'", "").Replace("-", "").Replace(" ", "").Replace("(", "").Replace(")", "");
+		
+        return tidyName;
+    }
+#>
